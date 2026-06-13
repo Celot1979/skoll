@@ -1,9 +1,9 @@
-const CACHE = "auditor-ai-v2";
+const CACHE = "auditor-ai-v3";
 const ASSETS = [
   ".",
   "index.html",
   "style.css",
-  "app.js",
+  "app.js?v=20260613",
   "manifest.json",
   "icons/icon-192.svg",
   "icons/icon-512.svg"
