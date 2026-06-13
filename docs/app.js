@@ -44,6 +44,7 @@ const ANALYSIS_TEMPLATE = [
 ].join("\n");
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1/models";
+const FALLBACK_MODEL = "gemini-1.5-flash";
 
 let chatHistory = [];
 let isStreaming = false;
@@ -77,10 +78,14 @@ function getModelEndpoint(model, streaming) {
   return `${GEMINI_BASE}/${model}:${m}`;
 }
 
-async function geminiFetch(contents, systemPrompt, streaming) {
+let currentModelUsed = null;
+
+async function geminiFetch(contents, systemPrompt, streaming, model) {
   const key = getApiKey();
   if (!key) throw new Error("API Key no configurada");
-  const base = getModelEndpoint(getModel(), streaming);
+  model = model || getModel();
+  currentModelUsed = model;
+  const base = getModelEndpoint(model, streaming);
   const sep = base.includes("?") ? "&" : "?";
   const url = base + sep + "key=" + encodeURIComponent(key);
   let bodyContents = contents;
@@ -91,11 +96,17 @@ async function geminiFetch(contents, systemPrompt, streaming) {
       ...contents
     ];
   }
-  return fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ contents: bodyContents })
   });
+  if (res.status === 429 && model !== FALLBACK_MODEL) {
+    document.getElementById("status-text").textContent = "Usando " + FALLBACK_MODEL;
+    showToast("Cuota agotada en " + model + ", cambiando a " + FALLBACK_MODEL, "info");
+    return geminiFetch(contents, systemPrompt, streaming, FALLBACK_MODEL);
+  }
+  return res;
 }
 
 async function geminiStream(contents, systemPrompt, onChunk, onDone, onError) {
