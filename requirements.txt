@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+requests
+beautifulsoup4
+python-multipart
+google-genai
+rich
+bandit
+semgrep

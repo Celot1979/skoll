@@ -1,0 +1,4 @@
+body { background-color: #1a1a1a; color: #ffffff; font-family: 'Inter', sans-serif; padding: 20px; }
+.sidebar { background: #2d2d2d; padding: 20px; }
+.main-content { margin-left: 20px; }
+.btn-primary { background-color: #3b82f6; color: white; padding: 10px 20px; border: none; cursor: pointer; }

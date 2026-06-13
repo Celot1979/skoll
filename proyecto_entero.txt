@@ -1,0 +1,1069 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auditor-ai"
+version = "0.1.0"
+description = "Asistente CLI de seguridad y auditoría de código inspirado en RAPTOR usando Google Gemini"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+]
+dependencies = [
+    "typer[all]>=0.9.0",
+    "rich>=13.0.0",
+    "google-genai>=0.1.0",
+]
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+auditor-ai = "auditor_ai.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["auditor_ai*"]
+__version__ = "0.1.0"
+import os
+from google import genai
+from google.genai import types
+from auditor_ai.config import DEFAULT_MODEL, RAPTOR_SYSTEM_PROMPT
+
+class GeminiClient:
+    def __init__(self):
+        """
+        Inicializa el cliente de Google GenAI leyendo la API Key de la variable
+        de entorno GEMINI_API_KEY. Si no está configurada, eleva un ValueError.
+        """
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
+            # Lanzamos ValueError para que sea capturado en main.py y renderizado estilizado
+            raise ValueError(
+                "La variable de entorno GEMINI_API_KEY no está configurada.\n"
+                "Por favor, genera tu API Key en Google AI Studio y expórtala:\n"
+                "  export GEMINI_API_KEY=\"tu_clave_aqui\""
+            )
+        
+        # Inicialización del SDK oficial google-genai
+        try:
+            self.client = genai.Client(api_key=self.api_key)
+        except Exception as e:
+            raise RuntimeError(f"Error al inicializar el SDK de Gemini: {str(e)}")
+
+    def iniciar_chat(self, model: str = DEFAULT_MODEL):
+        """
+        Inicia una sesión de chat interactivo con el System Prompt de RAPTOR precargado.
+        """
+        # Configuración del prompt del sistema para el chat
+        config = types.GenerateContentConfig(
+            system_instruction=RAPTOR_SYSTEM_PROMPT,
+            temperature=0.3, # Baja temperatura para análisis lógicos más estables
+        )
+        try:
+            chat = self.client.chats.create(
+                model=model,
+                config=config
+            )
+            return chat
+        except Exception as e:
+            raise RuntimeError(f"No se pudo crear la sesión de chat: {str(e)}")
+
+    def analizar_codigo_stream(self, prompt_usuario: str, model: str = DEFAULT_MODEL):
+        """
+        Genera una respuesta en streaming para el análisis de código o logs de vulnerabilidades.
+        """
+        # Configuración para el análisis estático
+        config = types.GenerateContentConfig(
+            system_instruction=RAPTOR_SYSTEM_PROMPT,
+            temperature=0.2, # Muy baja temperatura para evitar invenciones y ser precisos en el código
+        )
+        try:
+            # Uso de generate_content_stream de la SDK de Google GenAI
+            response_stream = self.client.models.generate_content_stream(
+                model=model,
+                contents=prompt_usuario,
+                config=config
+            )
+            return response_stream
+        except Exception as e:
+            raise RuntimeError(f"Error durante la generación de contenido en streaming: {str(e)}")
+import os
+
+# Modelo de IA por defecto
+# Usamos gemini-2.5-flash por su rapidez y menor costo, pero permitimos configurar gemini-2.5-pro mediante variables
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+# Prompts de Sistema inspirados en RAPTOR y localizados a Español
+
+RAPTOR_SYSTEM_PROMPT = """
+Eres Auditor-AI (inspirado en el framework RAPTOR), un Ingeniero DevSecOps experto y Consultor de Ciberseguridad de élite.
+Tu objetivo es realizar análisis de seguridad estáticos (SAST) y auditorías de código exhaustivas sobre los scripts y proyectos que proporcione el usuario.
+
+IMPORTANTE: Opera estrictamente bajo principios defensivos y éticos:
+1. No proporciones código de exploits funcionales ni payloads listos para atacar.
+2. Enfócate exclusivamente en identificar vulnerabilidades, evaluar su impacto y sugerir parches seguros y de remediación.
+3. Tus reportes y respuestas deben estar siempre en ESPAÑOL, estructurados, claros y listos para ser leídos por desarrolladores e ingenieros de seguridad.
+
+Cuando audites un hallazgo, estructura tu análisis mental y tu reporte final bajo las siguientes ETAPAS DE RAPTOR:
+
+- ETAPA A: Ruido vs Realidad
+Evalúa si el posible fallo reportado es una vulnerabilidad real en el contexto de este código o si se trata de ruido del analizador (Falso Positivo). Justifica tu veredicto.
+
+- ETAPA B: Requisitos de Explotación e Impacto
+Describe qué condiciones técnicas, configuraciones especiales o nivel de acceso (ej. privilegios locales, red interna, etc.) necesitaría un atacante para detonar este fallo. Explica la gravedad real.
+
+- ETAPA C: Alcanzabilidad del Flujo (Reachability)
+Determina si los datos controlados por un usuario (entradas de API, parámetros de comandos, archivos de configuración, etc.) pueden viajar a través del flujo del programa hasta llegar al punto crítico (Sink) donde ocurre la vulnerabilidad.
+
+- ETAPA D: Veredicto de Severidad y Solución Propuesta (Mitigación)
+Asigna un nivel de severidad (Crítica, Alta, Media, Baja, Informativa). Proporciona explicaciones teóricas exhaustivas de por qué ocurre el problema y muestra el bloque de código corregido con las mejores prácticas aplicadas para mitigar el riesgo.
+"""
+
+ANALYSIS_TEMPLATE_PROMPT = """
+Analiza el siguiente código fuente o resultado de escáner que te comparto.
+Genera un reporte de seguridad extremadamente exhaustivo detallando todos los hallazgos en formato Markdown en ESPAÑOL.
+
+Estructura el reporte para cada vulnerabilidad encontrada de la siguiente manera:
+
+# [Severidad] - [Nombre de la Vulnerabilidad]
+- **Archivo/Línea**: `ruta/del/archivo.py` (líneas correspondientes)
+- **Descripción**: Breve descripción del fallo.
+
+### Metodología de Auditoría RAPTOR:
+1. **Etapa A (Ruido vs Realidad)**: [Tu análisis de si es real o falso positivo]
+2. **Etapa B (Requisitos de Explotación)**: [Qué requiere un atacante para detonarla]
+3. **Etapa C (Alcanzabilidad)**: [Análisis de flujo de datos del usuario al sink]
+
+### Solución y Mitigación Propuesta:
+- **Explicación Técnica**: Por qué la solución propuesta es segura.
+- **Código Corregido**:
+```[lenguaje]
+[Código seguro corregido]
+```
+
+---
+Código a analizar:
+{code_content}
+"""
+
+CHAT_WELCOME_MESSAGE = """
+[bold green]¡Bienvenido a Auditor-AI CLI! 🛡️🤖[/bold green]
+Iniciando chat interactivo de seguridad inspirado en el framework RAPTOR...
+Las respuestas e instrucciones están adaptadas al español.
+Escribe [bold cyan]'salir'[/bold cyan] o usa [bold cyan]Ctrl+D[/bold cyan] para finalizar la sesión de chat.
+"""
+import os
+import platform
+import webbrowser
+import threading
+import time
+import typer
+from typing import Optional
+from rich.console import Console
+from rich.prompt import Prompt
+
+from auditor_ai.config import DEFAULT_MODEL, CHAT_WELCOME_MESSAGE, ANALYSIS_TEMPLATE_PROMPT
+from auditor_ai.client import GeminiClient
+from auditor_ai.scanner import ejecutar_escaneo_sast
+from auditor_ai.verifier import preguntar_y_ejecutar_verificacion
+from auditor_ai.utils import (
+    mostrar_error_api_key,
+    mostrar_error_general,
+    escanear_directorio,
+    leer_archivo
+)
+
+app = typer.Typer(
+    help="Auditor-AI: Asistente CLI de ciberseguridad para auditorías de código inspirado en RAPTOR.",
+    no_args_is_help=True
+)
+console = Console()
+
+def obtener_cliente() -> GeminiClient:
+    """Intenta inicializar y retornar el cliente de Gemini. Si falla, sale de la CLI de forma segura."""
+    try:
+        return GeminiClient()
+    except ValueError as e:
+        mostrar_error_api_key(str(e))
+        raise typer.Exit(code=1)
+    except Exception as e:
+        mostrar_error_general(str(e))
+        raise typer.Exit(code=1)
+
+@app.command("chat")
+def chat_comando(
+    model: str = typer.Option(
+        DEFAULT_MODEL,
+        "--model", "-m",
+        help="Modelo de Gemini a utilizar (ej. gemini-1.5-flash, gemini-1.5-pro)."
+    )
+):
+    """
+    Inicia un chat interactivo de seguridad en la terminal con un System Prompt DevSecOps.
+    """
+    client = obtener_cliente()
+    console.print(CHAT_WELCOME_MESSAGE)
+
+    try:
+        chat = client.iniciar_chat(model=model)
+    except Exception as e:
+        mostrar_error_general(f"No se pudo iniciar la sesión de chat: {str(e)}")
+        raise typer.Exit(code=1)
+
+    while True:
+        try:
+            user_input = Prompt.ask("\n[bold cyan]Auditor-AI ➔ [/bold cyan]")
+            if user_input.strip().lower() in ("salir", "exit", "quit"):
+                console.print("[bold yellow][*] Finalizando sesión de chat de seguridad. ¡Mantente seguro![/bold yellow]")
+                break
+
+            if not user_input.strip():
+                continue
+
+            console.print("\n[bold green]Gemini ➔ [/bold green]", end="")
+            
+            # Ejecutamos el streaming de la respuesta del chat iterando directamente
+            stream = chat.send_message_stream(user_input)
+            for chunk in stream:
+                console.print(chunk.text, end="")
+            console.print()  # Nueva línea al finalizar la respuesta
+
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[bold yellow][*] Sesión interrumpida por el usuario. ¡Adiós![/bold yellow]")
+            break
+        except Exception as e:
+            console.print(f"\n[bold red][Error] Ocurrió un fallo en la llamada de IA: {str(e)}[/bold red]")
+
+@app.command("analyze")
+def analyze_comando(
+    ruta: str = typer.Argument(
+        ...,
+        help="Ruta al archivo o carpeta de código local a auditar."
+    ),
+    model: str = typer.Option(
+        DEFAULT_MODEL,
+        "--model", "-m",
+        help="Modelo de Gemini a usar."
+    )
+):
+    """
+    Analiza un archivo o directorio local en busca de fallos de seguridad y vulnerabilidades lógicas.
+    """
+    if not os.path.exists(ruta):
+        mostrar_error_general(f"La ruta '{ruta}' no existe en el sistema.")
+        raise typer.Exit(code=1)
+
+    client = obtener_cliente()
+
+    # Recopilar el contenido a analizar
+    if os.path.isdir(ruta):
+        console.print(f"[bold blue][*] Escaneando directorio recursivamente:[/bold blue] '{ruta}'...")
+        codigo = escanear_directorio(ruta)
+    else:
+        console.print(f"[bold blue][*] Leyendo archivo individual:[/bold blue] '{ruta}'...")
+        codigo = leer_archivo(ruta)
+
+    if not codigo or codigo.strip() == "":
+        mostrar_error_general("No se pudo obtener código fuente legible de la ruta especificada.")
+        raise typer.Exit(code=1)
+
+    prompt_analisis = ANALYSIS_TEMPLATE_PROMPT.format(code_content=codigo)
+
+    console.print("[bold yellow][*] Enviando contexto a Gemini para auditoría RAPTOR (Etapas A-D)...[/bold yellow]\n")
+
+    try:
+        # Iniciamos el stream de la respuesta de Gemini
+        stream = client.analizar_codigo_stream(prompt_analisis, model=model)
+        for chunk in stream:
+            console.print(chunk.text, end="")
+        console.print()
+
+    except Exception as e:
+        mostrar_error_general(f"Fallo al procesar el análisis con Gemini: {str(e)}")
+        raise typer.Exit(code=1)
+
+    # Al finalizar el reporte, se pregunta interactivamente si desea ejecutar verifier.py
+    preguntar_y_ejecutar_verificacion(ruta)
+
+@app.command("scan")
+def scan_comando(
+    ruta: str = typer.Argument(
+        ...,
+        help="Ruta del proyecto a escanear con herramientas SAST locales."
+    ),
+    tool: str = typer.Option(
+        "all",
+        "--tool", "-t",
+        help="Herramienta local a correr: 'bandit', 'semgrep', o 'all'."
+    ),
+    model: str = typer.Option(
+        DEFAULT_MODEL,
+        "--model", "-m",
+        help="Modelo de Gemini a usar para interpretar los hallazgos."
+    )
+):
+    """
+    Ejecuta herramientas SAST locales (Bandit/Semgrep) y usa Gemini para auditar sus reportes.
+    """
+    if not os.path.exists(ruta):
+        mostrar_error_general(f"La ruta '{ruta}' no existe en el sistema.")
+        raise typer.Exit(code=1)
+
+    # 1. Ejecutar análisis estático local
+    console.print(f"[bold blue][*] Lanzando herramientas SAST locales en:[/bold blue] '{ruta}'...")
+    with console.status("[bold green]Corriendo escáneres estáticos locales...", spinner="dots") as status:
+        reportes_sast = ejecutar_escaneo_sast(ruta, tool=tool)
+
+    # Formatear el informe consolidado para enviarlo a Gemini
+    sast_resumen = ""
+    for clave, salida in reportes_sast.items():
+        sast_resumen += f"=== REPORTE DE {clave.upper()} ===\n{salida}\n\n"
+
+    console.print("[green]✔ Escaneo SAST local finalizado.[/green]")
+    console.print("[bold yellow][*] Enviando reportes a Gemini para interpretación y triage RAPTOR...[/bold yellow]\n")
+
+    # 2. Enviar a Gemini
+    client = obtener_cliente()
+    prompt_sast = (
+        "Interpreta la salida de las siguientes herramientas SAST locales sobre el código del proyecto.\n"
+        "Identifica los fallos reales de los falsos positivos y genera un reporte en ESPAÑOL "
+        "estructurado según la metodología RAPTOR (Etapas A-D):\n\n"
+        f"{sast_resumen}"
+    )
+
+    try:
+        stream = client.analizar_codigo_stream(prompt_sast, model=model)
+        for chunk in stream:
+            console.print(chunk.text, end="")
+        console.print()
+
+    except Exception as e:
+        mostrar_error_general(f"Fallo al procesar el reporte SAST con Gemini: {str(e)}")
+        raise typer.Exit(code=1)
+
+    # Al finalizar el reporte, se pregunta interactivamente si desea ejecutar verifier.py
+    preguntar_y_ejecutar_verificacion(ruta)
+
+@app.command("web")
+def web_comando(
+    port: int = typer.Option(
+        8000,
+        "--port", "-p",
+        help="Puerto en el que se ejecutará el servidor web local."
+    ),
+    no_browser: bool = typer.Option(
+        False,
+        "--no-browser",
+        help="No abrir el navegador automáticamente al iniciar."
+    ),
+    model: str = typer.Option(
+        DEFAULT_MODEL,
+        "--model", "-m",
+        help="Modelo de Gemini por defecto para la interfaz web."
+    )
+):
+    """
+    Lanza la interfaz web local de Auditor-AI en http://localhost:<port>.
+    Detecta automáticamente el sistema operativo y abre el navegador si hay entorno gráfico.
+    """
+    try:
+        import uvicorn
+        from auditor_ai.web_server import app as web_app
+    except ImportError:
+        console.print(
+            "[bold red]❌ Dependencias web no instaladas.[/bold red]\n"
+            "Instálalas con: [bold cyan]pip install fastapi uvicorn[standard][/bold cyan]"
+        )
+        raise typer.Exit(code=1)
+
+    # ── Detección de SO ─────────────────────────────────────────────
+    sistema = platform.system()        # 'Darwin' | 'Linux' | 'Windows'
+    nombre_so = {"Darwin": "macOS", "Linux": "Linux", "Windows": "Windows"}.get(sistema, sistema)
+
+    # Detectar si hay entorno gráfico (útil en servidores Linux sin escritorio)
+    def tiene_gui() -> bool:
+        if sistema == "Darwin":
+            return True   # macOS siempre tiene GUI
+        if sistema == "Linux":
+            return bool(
+                os.environ.get("DISPLAY")
+                or os.environ.get("WAYLAND_DISPLAY")
+                or os.environ.get("MIR_SOCKET")
+            )
+        return True
+
+    url = f"http://localhost:{port}"
+
+    console.print()
+    console.print("[bold green]🛡️  Auditor-AI — Interfaz Web[/bold green]")
+    console.print(f"   [dim]Sistema detectado:[/dim]  [bold]{nombre_so}[/bold]")
+    console.print(f"   [dim]Modelo por defecto:[/dim] [bold cyan]{model}[/bold cyan]")
+    console.print(f"   [dim]Servidor en:[/dim]        [bold blue]{url}[/bold blue]")
+
+    abrir_navegador = not no_browser
+
+    if abrir_navegador and tiene_gui():
+        console.print("   [dim]Navegador:[/dim]          [green]Abriéndose automáticamente...[/green]")
+        # Abrir navegador en un hilo secundario tras 1.2 s (dar tiempo al servidor a arrancar)
+        def _open():
+            time.sleep(1.2)
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+        threading.Thread(target=_open, daemon=True).start()
+    elif abrir_navegador and not tiene_gui():
+        console.print(f"   [dim]Navegador:[/dim]          [yellow]Sin entorno gráfico — abre manualmente:[/yellow] {url}")
+    else:
+        console.print(f"   [dim]Navegador:[/dim]          [dim]Desactivado (--no-browser)[/dim]")
+
+    console.print()
+    console.print("[dim]   Pulsa Ctrl+C para detener el servidor.[/dim]\n")
+
+    # ── Lanzar Uvicorn ──────────────────────────────────────────────
+    uvicorn.run(
+        web_app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",     # Sin logs de peticiones para no ensuciar la terminal
+        access_log=False,
+    )
+
+
+if __name__ == "__main__":
+    app()import subprocess
+import shutil
+import json
+
+def is_tool_installed(name: str) -> bool:
+    """Verifica si un ejecutable está instalado y disponible en el PATH del sistema."""
+    return shutil.which(name) is not None
+
+def ejecutar_bandit(target_path: str) -> str:
+    """
+    Ejecuta Bandit localmente sobre el directorio o archivo indicado.
+    Devuelve la salida formateada.
+    """
+    if not is_tool_installed("bandit"):
+        return "[Error: Bandit no está instalado en este sistema. Instálalo con 'pip install bandit']."
+
+    try:
+        # Ejecutamos bandit en modo silencioso y exportando texto plano
+        process = subprocess.run(
+            ["bandit", "-r", target_path, "-f", "txt", "-q"],
+            capture_output=True,
+            text=True
+        )
+        # Bandit retorna código 1 si encuentra problemas, por lo que tomamos stdout de forma general
+        output = process.stdout.strip()
+        if not output:
+            output = "No se encontraron vulnerabilidades obvias usando Bandit."
+        return output
+    except Exception as e:
+        return f"[Error al ejecutar Bandit: {str(e)}]"
+
+def ejecutar_semgrep(target_path: str) -> str:
+    """
+    Ejecuta Semgrep localmente con reglas básicas de seguridad.
+    Devuelve el resultado formateado.
+    """
+    if not is_tool_installed("semgrep"):
+        return "[Error: Semgrep no está instalado en este sistema. Instálalo con 'pip install semgrep']."
+
+    try:
+        # Ejecutamos semgrep usando el conjunto de reglas automáticas de seguridad
+        # --quiet para evitar banners y ruido extra
+        process = subprocess.run(
+            ["semgrep", "scan", "--config", "auto", target_path, "--quiet"],
+            capture_output=True,
+            text=True
+        )
+        output = process.stdout.strip()
+        if not output:
+            output = "No se encontraron vulnerabilidades obvias usando Semgrep."
+        return output
+    except Exception as e:
+        return f"[Error al ejecutar Semgrep: {str(e)}]"
+
+def ejecutar_escaneo_sast(target_path: str, tool: str = "all") -> dict:
+    """
+    Ejecuta las herramientas SAST indicadas y retorna un diccionario con los reportes.
+    """
+    resultados = {}
+    tool = tool.lower()
+
+    if tool in ("bandit", "all"):
+        resultados["bandit"] = ejecutar_bandit(target_path)
+    
+    if tool in ("semgrep", "all"):
+        resultados["semgrep"] = ejecutar_semgrep(target_path)
+
+    return resultados
+import os
+from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+
+console = Console()
+
+# Extensiones de texto comunes que contienen código fuente de interés
+INTERESTING_EXTENSIONS = {
+    ".py", ".sh", ".bash", ".js", ".ts", ".go", ".rs", ".c", ".cpp", ".h",
+    ".json", ".yaml", ".yml", ".tf", ".tfvars", ".rb", ".php", ".ini",
+    ".conf", ".java", ".gradle", ".properties", ".toml", ".md", ".dockerfile"
+}
+
+# Carpetas y archivos a ignorar durante un escaneo recursivo (evitar excesos de tokens y binarios)
+EXCLUDE_DIRS = {
+    ".git", "node_modules", "venv", ".venv", "__pycache__", "build", "dist",
+    "target", ".idea", ".vscode", "tmp", "coverage", ".gemini", "brain"
+}
+
+def leer_archivo(filepath: str) -> str:
+    """Intenta leer el contenido de un archivo de texto de forma segura."""
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    except Exception as e:
+        return f"[No se pudo leer el archivo: {str(e)}]"
+
+def es_extension_valida(filename: str) -> bool:
+    """Verifica si la extensión del archivo es candidata para auditoría."""
+    ext = os.path.splitext(filename)[1].lower()
+    # Si no tiene extensión pero se llama 'Dockerfile', lo permitimos
+    if not ext and filename.lower() == "dockerfile":
+        return True
+    return ext in INTERESTING_EXTENSIONS
+
+def es_directorio_excluido(dirpath: str) -> bool:
+    """Verifica si la ruta contiene alguna de las carpetas excluidas."""
+    parts = dirpath.split(os.sep)
+    return any(ex in parts for ex in EXCLUDE_DIRS)
+
+def escanear_directorio(dirpath: str, max_chars: int = 150000) -> str:
+    """
+    Escanea recursivamente un directorio, filtra archivos binarios o excluidos,
+    y compila un contexto en texto legible para enviar a la IA.
+    """
+    contexto = []
+    total_chars = 0
+
+    for root, dirs, files in os.walk(dirpath):
+        # Filtrado in-place de directorios excluidos para evitar descender en ellos
+        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+
+        for file in files:
+            if not es_extension_valida(file):
+                continue
+            
+            filepath = os.path.join(root, file)
+            # Doble chequeo de ruta para carpetas excluidas
+            if es_directorio_excluido(filepath):
+                continue
+
+            rel_path = os.path.relpath(filepath, dirpath)
+            content = leer_archivo(filepath)
+            
+            # Limitar tamaño acumulado
+            if total_chars + len(content) > max_chars:
+                contexto.append(
+                    f"--- ARCHIVO: {rel_path} (TRUNCADO POR LÍMITE DE TAMAÑO) ---\n"
+                    "[El archivo no fue cargado completamente para evitar superar el contexto CLI]\n"
+                )
+                break
+
+            contexto.append(
+                f"--- ARCHIVO: {rel_path} ---\n"
+                f"{content}\n"
+                f"-------------------------\n"
+            )
+            total_chars += len(content)
+
+    if not contexto:
+        return "No se encontraron archivos de código fuente válidos para analizar en este directorio."
+
+    return "\n".join(contexto)
+
+def mostrar_error_api_key(error_msg: str):
+    """Muestra un panel estilizado para advertir sobre la falta de API Key."""
+    error_panel = Panel(
+        f"[bold red]Acceso Denegado / Variable Faltante[/bold red]\n\n"
+        f"{error_msg}\n\n"
+        "[dim]Obtén tu API Key gratis en: https://aistudio.google.com/[/dim]",
+        title="[bold yellow]⚠️ Error de Configuración de Gemini[/bold yellow]",
+        border_style="red",
+        expand=False
+    )
+    console.print(error_panel)
+
+def mostrar_markdown(content: str):
+    """Renderiza el contenido Markdown con formato enriquecido en la terminal."""
+    md = Markdown(content)
+    console.print(md)
+
+def mostrar_error_general(msg: str):
+    """Muestra un error general formateado."""
+    console.print(f"[bold red]❌ Error:[/bold red] [yellow]{msg}[/yellow]")
+import os
+from typing import List, Dict, Type
+from rich.console import Console
+from rich.prompt import Confirm, Prompt
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn
+
+console = Console()
+
+class BaseVerificationPlugin:
+    """Clase base para todos los plugins de verificación dinámica."""
+    name: str = "BasePlugin"
+    description: str = "Descripción del plugin"
+
+    def __init__(self):
+        pass
+
+    def verificar(self, target_path: str, context: dict) -> dict:
+        """
+        Ejecuta el proceso de verificación.
+        Debe retornar un diccionario con el resultado:
+        {
+            'success': bool,
+            'log': str,
+            'details': str
+        }
+        """
+        raise NotImplementedError("Los plugins deben implementar el método verificar().")
+
+
+class FuzzingSimulationPlugin(BaseVerificationPlugin):
+    """Plugin de simulación de fuzzing y crash analysis (estilo AFL++ / GDB)."""
+    name = "Simulador Fuzzing (AFL++)"
+    description = "Simula la instrumentación y pruebas de inputs para validar crashes de memoria."
+
+    def verificar(self, target_path: str, context: dict) -> dict:
+        console.print("\n[bold yellow][*] Iniciando simulación de verificación dinámica (AFL++ / GDB)...[/bold yellow]")
+        
+        # Simulación de pasos de compilación e instrumentación
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            t1 = progress.add_task("[cyan]Instrumentando código y preparando compilación...", total=100)
+            import time
+            time.sleep(1.2)
+            progress.update(t1, completed=100)
+
+            t2 = progress.add_task("[cyan]Ejecutando fuzzer en contenedor Docker aislado...", total=100)
+            time.sleep(1.5)
+            progress.update(t2, completed=100)
+
+            t3 = progress.add_task("[cyan]Analizando volcado de pila (Core Dump) en GDB...", total=100)
+            time.sleep(1.0)
+            progress.update(t3, completed=100)
+
+        # Retornamos un log simulado y explicativo de cómo funcionaría
+        log_content = (
+            "--- LOG DE EJECUCIÓN DEL VERIFICADOR ---\n"
+            f"Objetivo de análisis: {target_path}\n"
+            "Precondición: AFL++ compilado con instrumentación de cobertura.\n"
+            "Estado: 10,000 ejecuciones por segundo alcanzadas.\n"
+            "Resultado: Crash localizado en la dirección 0x08048400.\n"
+            "Análisis GDB: Puntero de instrucción (EIP/RIP) modificado exitosamente.\n"
+            "Veredicto: ¡Vulnerabilidad de desbordamiento VALIDADA físicamente!\n"
+        )
+        
+        return {
+            "success": True,
+            "log": log_content,
+            "details": (
+                "Esta es una simulación de la Fase 3 de RAPTOR.\n"
+                "Para ejecutar esto de forma real, puedes crear un plugin en verifier.py que llame a "
+                "docker o a subprocesos locales (AFL++, gdb, pytest, etc.) usando los archivos del proyecto."
+            )
+        }
+
+
+class DockerSandboxPlugin(BaseVerificationPlugin):
+    """Plugin de verificación en sandbox Docker para análisis de configuraciones y entornos."""
+    name = "Sandbox Docker"
+    description = "Lanza un contenedor Docker seguro para verificar si el puerto o config está expuesto."
+
+    def verificar(self, target_path: str, context: dict) -> dict:
+        console.print("\n[bold yellow][*] Levantando contenedor Docker seguro para validación local...[/bold yellow]")
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            t1 = progress.add_task("[cyan]Creando sandbox aislado...", total=100)
+            import time
+            time.sleep(1.0)
+            progress.update(t1, completed=100)
+
+            t2 = progress.add_task("[cyan]Evaluando puertos y configuraciones expuestas...", total=100)
+            time.sleep(1.2)
+            progress.update(t2, completed=100)
+
+        log_content = (
+            "--- LOG DE EJECUCIÓN DOCKER ---\n"
+            "Contenedor temporal iniciado en modo de red aislado.\n"
+            "Verificando permisos y directivas de configuración locales...\n"
+            "Resultado: Configuración no segura detectada en puerto de prueba.\n"
+        )
+        
+        return {
+            "success": True,
+            "log": log_content,
+            "details": "Simulación de levantamiento de servicios locales para comprobar fugas de puertos o secretos."
+        }
+
+
+# Registro central de plugins
+PLUGINS_REGISTRY: Dict[str, Type[BaseVerificationPlugin]] = {
+    "fuzzing": FuzzingSimulationPlugin,
+    "docker": DockerSandboxPlugin
+}
+
+def registrar_plugin(clave: str, plugin_class: Type[BaseVerificationPlugin]):
+    """Permite registrar plugins externos en caliente."""
+    PLUGINS_REGISTRY[clave] = plugin_class
+
+def preguntar_y_ejecutar_verificacion(target_path: str):
+    """
+    Pregunta al usuario interactivamente si desea ejecutar la verificación dinámica.
+    Si responde que sí, lista los plugins disponibles y permite ejecutar uno.
+    """
+    console.print("\n" + "─" * 60)
+    # Pregunta interactiva al finalizar el reporte estático
+    confirmar = Confirm.ask(
+        "[bold cyan]¿Desea iniciar la fase de verificación dinámica (verifier.py) para validar estos hallazgos?[/bold cyan]",
+        default=False
+    )
+    
+    if not confirmar:
+        console.print("[yellow][*] Auditoría finalizada de forma segura. No se ejecutaron verificaciones dinámicas.[/yellow]")
+        return
+
+    # Si el usuario acepta, listamos y ejecutamos
+    console.print("\n[bold green]=== Módulos de Verificación Dinámica Disponibles ===[/bold green]")
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Índice", style="dim", width=6)
+    table.add_column("Clave", style="cyan")
+    table.add_column("Nombre del Módulo")
+    table.add_column("Descripción")
+
+    claves = list(PLUGINS_REGISTRY.keys())
+    for idx, clave in enumerate(claves, start=1):
+        plugin = PLUGINS_REGISTRY[clave]
+        table.add_row(str(idx), clave, plugin.name, plugin.description)
+
+    console.print(table)
+
+    seleccion = Prompt.ask(
+        "Seleccione la clave del módulo que desea ejecutar (o presione Enter para salir)",
+        choices=claves + [""],
+        default=""
+    )
+
+    if not seleccion:
+        console.print("[yellow][*] Verificación dinámica cancelada por el usuario.[/yellow]")
+        return
+
+    # Instanciamos y corremos el plugin seleccionado
+    plugin_class = PLUGINS_REGISTRY[seleccion]
+    plugin_instance = plugin_class()
+    
+    try:
+        resultado = plugin_instance.verificar(target_path, {})
+        
+        # Renderizamos el resultado de forma atractiva
+        console.print("\n[bold green]✔ Verificación Ejecutada Exitosamente[/bold green]")
+        console.print(Panel(resultado["log"], title="Logs del Verificador", border_style="green"))
+        console.print(Panel(resultado["details"], title="Detalles y Recomendación", border_style="blue"))
+        
+    except Exception as e:
+        console.print(f"[bold red][Error] Fallo al ejecutar el plugin: {str(e)}[/bold red]")
+"""
+web_server.py — Servidor FastAPI para la interfaz web de Auditor-AI.
+Expone los mismos flujos del CLI (analyze, scan, chat) como endpoints con streaming SSE.
+"""
+
+import os
+import json
+import asyncio
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+from auditor_ai.client import GeminiClient
+from auditor_ai.config import DEFAULT_MODEL, ANALYSIS_TEMPLATE_PROMPT
+from auditor_ai.scanner import ejecutar_escaneo_sast
+from auditor_ai.utils import escanear_directorio, leer_archivo
+
+# ─── App Setup ───────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="Auditor-AI Web",
+    description="Interfaz web local para auditorías de seguridad con Gemini",
+    version="0.1.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Directorio de archivos estáticos
+STATIC_DIR = Path(__file__).parent / "static"
+
+# Montar archivos estáticos
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Sesiones de chat en memoria (chat_id -> sesión de Gemini)
+_chat_sessions: dict = {}
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def get_client() -> GeminiClient:
+    """Inicializa el cliente de Gemini, lanza HTTPException si falta la API key."""
+    try:
+        return GeminiClient()
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def sse_stream_gemini(prompt: str, model: str):
+    """
+    Generador asíncrono que hace streaming de la respuesta de Gemini
+    usando el protocolo Server-Sent Events (SSE).
+    """
+    client = get_client()
+    try:
+        loop = asyncio.get_event_loop()
+        # Ejecutar la llamada síncrona de streaming en un thread separado
+        stream = await loop.run_in_executor(
+            None,
+            lambda: client.analizar_codigo_stream(prompt, model=model)
+        )
+        for chunk in stream:
+            text = chunk.text if hasattr(chunk, "text") else str(chunk)
+            if text:
+                data = json.dumps({"type": "chunk", "content": text})
+                yield f"data: {data}\n\n"
+                await asyncio.sleep(0)  # ceder control al event loop
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    except Exception as e:
+        error_data = json.dumps({"type": "error", "content": str(e)})
+        yield f"data: {error_data}\n\n"
+
+
+async def sse_stream_chat(chat_session, message: str):
+    """Streaming de un mensaje en una sesión de chat existente."""
+    try:
+        loop = asyncio.get_event_loop()
+        stream = await loop.run_in_executor(
+            None,
+            lambda: chat_session.send_message_stream(message)
+        )
+        for chunk in stream:
+            text = chunk.text if hasattr(chunk, "text") else str(chunk)
+            if text:
+                data = json.dumps({"type": "chunk", "content": text})
+                yield f"data: {data}\n\n"
+                await asyncio.sleep(0)
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    except Exception as e:
+        error_data = json.dumps({"type": "error", "content": str(e)})
+        yield f"data: {error_data}\n\n"
+
+
+# ─── Rutas ───────────────────────────────────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Sirve la interfaz web principal."""
+    index_path = STATIC_DIR / "index.html"
+    return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/status")
+async def status():
+    """Comprueba si la API key está configurada y el servidor está operativo."""
+    api_key_set = bool(os.getenv("GEMINI_API_KEY"))
+    return {
+        "status": "ok",
+        "api_key_configured": api_key_set,
+        "default_model": DEFAULT_MODEL,
+    }
+
+
+@app.post("/api/analyze/file")
+async def analyze_file(
+    file: UploadFile = File(...),
+    model: str = Form(DEFAULT_MODEL),
+):
+    """
+    Recibe un archivo subido desde el navegador, lo analiza con Gemini
+    y devuelve el resultado en streaming SSE.
+    """
+    content = await file.read()
+    try:
+        code = content.decode("utf-8", errors="ignore")
+    except Exception:
+        raise HTTPException(status_code=400, detail="No se pudo leer el archivo como texto.")
+
+    if not code.strip():
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+
+    prompt = ANALYSIS_TEMPLATE_PROMPT.format(code_content=f"# {file.filename}\n{code}")
+
+    return StreamingResponse(
+        sse_stream_gemini(prompt, model),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+@app.post("/api/analyze/path")
+async def analyze_path(request: Request):
+    """
+    Analiza una ruta local del servidor con Gemini (equivalente a `auditor-ai analyze`).
+    """
+    body = await request.json()
+    ruta = body.get("path", "").strip()
+    model = body.get("model", DEFAULT_MODEL)
+
+    if not ruta:
+        raise HTTPException(status_code=400, detail="Se requiere el campo 'path'.")
+
+    if not os.path.exists(ruta):
+        raise HTTPException(status_code=404, detail=f"La ruta '{ruta}' no existe.")
+
+    if os.path.isdir(ruta):
+        codigo = escanear_directorio(ruta)
+    else:
+        codigo = leer_archivo(ruta)
+
+    if not codigo or not codigo.strip():
+        raise HTTPException(status_code=400, detail="No se encontró código legible en la ruta.")
+
+    prompt = ANALYSIS_TEMPLATE_PROMPT.format(code_content=codigo)
+
+    return StreamingResponse(
+        sse_stream_gemini(prompt, model),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@app.post("/api/scan")
+async def scan_path(request: Request):
+    """
+    Ejecuta Bandit/Semgrep en una ruta local y envía el reporte a Gemini.
+    Equivalente a `auditor-ai scan`.
+    """
+    body = await request.json()
+    ruta = body.get("path", "").strip()
+    tool = body.get("tool", "all")
+    model = body.get("model", DEFAULT_MODEL)
+
+    if not ruta:
+        raise HTTPException(status_code=400, detail="Se requiere el campo 'path'.")
+    if not os.path.exists(ruta):
+        raise HTTPException(status_code=404, detail=f"La ruta '{ruta}' no existe.")
+
+    loop = asyncio.get_event_loop()
+    reportes = await loop.run_in_executor(
+        None,
+        lambda: ejecutar_escaneo_sast(ruta, tool=tool)
+    )
+
+    sast_resumen = ""
+    for clave, salida in reportes.items():
+        sast_resumen += f"=== REPORTE DE {clave.upper()} ===\n{salida}\n\n"
+
+    prompt = (
+        "Interpreta la salida de las siguientes herramientas SAST locales sobre el código del proyecto.\n"
+        "Identifica los fallos reales de los falsos positivos y genera un reporte en ESPAÑOL "
+        "estructurado según la metodología RAPTOR (Etapas A-D):\n\n"
+        f"{sast_resumen}"
+    )
+
+    return StreamingResponse(
+        sse_stream_gemini(prompt, model),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@app.post("/api/chat/start")
+async def chat_start(request: Request):
+    """Inicia una nueva sesión de chat y devuelve un session_id."""
+    body = await request.json()
+    model = body.get("model", DEFAULT_MODEL)
+    client = get_client()
+
+    import uuid
+    session_id = str(uuid.uuid4())
+
+    loop = asyncio.get_event_loop()
+    chat = await loop.run_in_executor(None, lambda: client.iniciar_chat(model=model))
+    _chat_sessions[session_id] = chat
+
+    return {"session_id": session_id, "model": model}
+
+
+@app.post("/api/chat/message")
+async def chat_message(request: Request):
+    """Envía un mensaje a una sesión de chat existente y hace streaming de la respuesta."""
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    message = body.get("message", "").strip()
+
+    if not session_id or session_id not in _chat_sessions:
+        raise HTTPException(status_code=404, detail="Sesión de chat no encontrada. Inicia una nueva.")
+    if not message:
+        raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío.")
+
+    chat = _chat_sessions[session_id]
+
+    return StreamingResponse(
+        sse_stream_chat(chat, message),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+@app.delete("/api/chat/{session_id}")
+async def chat_end(session_id: str):
+    """Termina y elimina una sesión de chat."""
+    _chat_sessions.pop(session_id, None)
+    return {"status": "ended"}

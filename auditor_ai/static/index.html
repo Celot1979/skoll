@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auditor-AI — Panel de Seguridad</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🛡️</span>
+        <div class="logo-text">
+          <h1>Auditor-AI</h1>
+          <span class="logo-sub">RAPTOR Security Suite</span>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-analyze" onclick="switchTab('analyze')">
+        <span class="nav-icon">🔍</span><span>Análisis de Código</span>
+      </button>
+      <button class="nav-item" id="nav-scan" onclick="switchTab('scan')">
+        <span class="nav-icon">⚡</span><span>Escaneo SAST</span>
+      </button>
+      <button class="nav-item" id="nav-web" onclick="switchTab('web')">
+        <span class="nav-icon">🌐</span><span>Auditoría Web (URL)</span>
+      </button>
+      <button class="nav-item" id="nav-chat" onclick="switchTab('chat')">
+        <span class="nav-icon">💬</span><span>Chat de Seguridad</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="status-indicator" id="status-indicator">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Comprobando...</span>
+      </div>
+      <div class="model-select-wrapper">
+        <label for="global-model">Modelo</label>
+          <select id="global-model">
+            <option value="gemini-2.5-flash" selected>gemini-2.5-flash ⚡</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro 🧠 (cuota limitada)</option>
+          </select>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title" id="topbar-title">Análisis de Código</div>
+    </header>
+
+    <section class="tab-panel active" id="tab-analyze">
+      <div class="panel-body">
+        <div class="card upload-card" id="drop-zone">
+          <h2>Sube tu archivo</h2>
+          <input type="file" id="file-input" hidden />
+          <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Seleccionar</button>
+        </div>
+        <div class="file-info-bar hidden" id="file-info-bar">
+          <span id="file-info-name"></span>
+          <button class="btn btn-primary btn-sm" id="analyze-file-btn" onclick="analyzeFile()">🚀 Auditar</button>
+        </div>
+      </div>
+      <div class="output-wrapper" id="analyze-output-wrapper">
+        <div class="output-box" id="analyze-output"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-scan">
+      <div class="panel-body">
+        <div class="card">
+          <h2 class="card-title">⚡ Escaneo SAST</h2>
+          <div class="tool-selector">
+            <span class="tool-label">Herramienta:</span>
+            <div class="tool-options">
+              <label class="chip-label">
+                <input type="radio" name="sast-tool" value="bandit" checked />
+                <span class="chip">Bandit</span>
+              </label>
+              <label class="chip-label">
+                <input type="radio" name="sast-tool" value="semgrep" />
+                <span class="chip">Semgrep</span>
+              </label>
+              <label class="chip-label">
+                <input type="radio" name="sast-tool" value="all" />
+                <span class="chip">All</span>
+              </label>
+            </div>
+          </div>
+          <input type="text" id="scan-path-input" class="text-input" placeholder="/ruta/al/proyecto" />
+          <button class="btn btn-primary" id="scan-btn" onclick="runScan()">⚡ Lanzar Escaneo</button>
+        </div>
+      </div>
+      <div class="output-wrapper" id="scan-output-wrapper">
+        <div class="output-box" id="scan-output"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-web">
+      <div class="panel-body">
+        <div class="card">
+          <h2 class="card-title">🌐 Auditoría de URL</h2>
+          <div class="input-group">
+            <input type="text" id="url-input" class="text-input" placeholder="https://ejemplo.com" />
+            <button class="btn btn-primary" id="analyze-url-btn" onclick="analyzeURL()">Auditar Web</button>
+          </div>
+        </div>
+      </div>
+      <div class="output-wrapper" id="web-output-wrapper">
+        <div class="output-box" id="web-output">
+          <div class="output-placeholder"><span>🌐</span>
+            <p>Resultados del análisis web...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-chat">
+      <div class="chat-wrapper">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+          <textarea id="chat-input" placeholder="Pregunta de seguridad..." rows="1" disabled></textarea>
+          <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()" disabled>Enviar</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <div class="api-key-overlay hidden" id="api-key-overlay">
+    <div class="api-key-modal">
+      <div class="api-key-modal-icon">🔑</div>
+      <h2>Configurar API Key</h2>
+      <p>Introduce tu API Key de Google Gemini para usar Auditor-AI.</p>
+      <p class="api-key-hint">Consíguela gratis en <a href="https://aistudio.google.com/" target="_blank">aistudio.google.com</a></p>
+      <input type="text" id="api-key-input" class="text-input" placeholder="AIzaSy..." />
+      <button class="btn btn-primary" id="api-key-btn" onclick="saveApiKey()">Guardar y conectar</button>
+      <p class="api-key-error hidden" id="api-key-error">API Key inválida. Intenta de nuevo.</p>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=4"></script>
+</body>
+
+</html>
