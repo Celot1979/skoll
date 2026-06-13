@@ -83,13 +83,18 @@ async function geminiFetch(contents, systemPrompt, streaming) {
   const base = getModelEndpoint(getModel(), streaming);
   const sep = base.includes("?") ? "&" : "?";
   const url = base + sep + "key=" + encodeURIComponent(key);
+  let bodyContents = contents;
+  if (systemPrompt) {
+    bodyContents = [
+      { role: "user", parts: [{ text: "[INSTRUCCIÓN DEL SISTEMA - Siguelas estrictamente]:\n" + systemPrompt }] },
+      { role: "model", parts: [{ text: "Entendido. Cumpliré las instrucciones del sistema en toda la conversación." }] },
+      ...contents
+    ];
+  }
   return fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents,
-      systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined
-    })
+    body: JSON.stringify({ contents: bodyContents })
   });
 }
 
@@ -426,12 +431,12 @@ async function startChat() {
   const btn = document.getElementById("start-chat-btn");
   if (btn) { btn.disabled = true; btn.textContent = "Iniciando..."; }
   try {
-    const test = await geminiNonStream(
-      [{ role: "user", parts: [{ text: "OK" }] }],
-      RAPTOR_SYSTEM_PROMPT
-    );
-    chatHistory = [{ role: "user", parts: [{ text: "Hola, soy un desarrollador haciendo auditoría de seguridad." }] }];
-    const welcome = await geminiNonStream(chatHistory, RAPTOR_SYSTEM_PROMPT);
+    chatHistory = [
+      { role: "user", parts: [{ text: "[INSTRUCCIÓN DEL SISTEMA - Siguelas estrictamente]:\n" + RAPTOR_SYSTEM_PROMPT }] },
+      { role: "model", parts: [{ text: "Entendido. Cumpliré las instrucciones del sistema en toda la conversación." }] },
+      { role: "user", parts: [{ text: "Hola, soy un desarrollador haciendo auditoría de seguridad." }] }
+    ];
+    const welcome = await geminiNonStream(chatHistory, null);
     chatHistory.push({ role: "model", parts: [{ text: welcome }] });
     chatInitialized = true;
     document.getElementById("chat-messages").innerHTML = "";
@@ -467,7 +472,7 @@ async function sendChatMessage() {
   bubbleEl.appendChild(cursorEl);
   await geminiStream(
     chatHistory,
-    RAPTOR_SYSTEM_PROMPT,
+    null,
     (full) => {
       bubbleEl.innerHTML = renderMarkdown(full);
       bubbleEl.appendChild(cursorEl);
