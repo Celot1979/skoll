@@ -46,17 +46,17 @@ const ANALYSIS_TEMPLATE = [
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1/models";
 const GROQ_BASE = "https://api.groq.com/openai/v1/chat/completions";
 
-const FALLBACK_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "llama3-70b-8192"];
+const FALLBACK_CHAIN = ["gemini-2.5-flash", "gemini-1.5-flash", "llama-3.3-70b-versatile"];
 
 const PROVIDER_MAP = {
   "gemini-2.5-flash": "gemini",
   "gemini-2.5-pro": "gemini",
   "gemini-1.5-flash": "gemini",
   "gemini-1.5-pro": "gemini",
-  "llama3-70b-8192": "groq",
-  "llama3-8b-8192": "groq",
-  "mixtral-8x7b-32768": "groq",
-  "gemma2-9b-it": "groq"
+  "llama-3.3-70b-versatile": "groq",
+  "llama-3.1-8b-instant": "groq",
+  "qwen/qwen3-32b": "groq",
+  "meta-llama/llama-4-scout-17b-16e-instruct": "groq"
 };
 
 let chatHistory = [];
