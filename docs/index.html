@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#161b22" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.svg" sizes="192x192" />
+  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+  <title>Auditor-AI — PWA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">&#x1F6E1;&#xFE0F;</span>
+        <div class="logo-text">
+          <h1>Auditor-AI</h1>
+          <span class="logo-sub">RAPTOR Security Suite</span>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-analyze" onclick="switchTab('analyze')">
+        <span class="nav-icon">&#x1F50D;</span><span>An&aacute;lisis</span>
+      </button>
+      <button class="nav-item" id="nav-web" onclick="switchTab('web')">
+        <span class="nav-icon">&#x1F310;</span><span>Auditar URL</span>
+      </button>
+      <button class="nav-item" id="nav-chat" onclick="switchTab('chat')">
+        <span class="nav-icon">&#x1F4AC;</span><span>Chat</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="status-indicator" id="status-indicator">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Comprobando...</span>
+      </div>
+      <div class="model-select-wrapper">
+        <label for="global-model">Modelo</label>
+        <select id="global-model">
+          <option value="gemini-2.5-flash" selected>gemini-2.5-flash &#x26A1;</option>
+          <option value="gemini-2.5-pro">gemini-2.5-pro &#x1F9E0; (cuota limitada)</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-title" id="topbar-title">An&aacute;lisis de C&oacute;digo</div>
+    </header>
+
+    <!-- ANALYZE TAB -->
+    <section class="tab-panel active" id="tab-analyze">
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:16px">
+        <div class="card upload-card" id="drop-zone">
+          <h2>&#x1F4C4; Sube un archivo</h2>
+          <input type="file" id="file-input" hidden />
+          <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Seleccionar archivo</button>
+          <p class="upload-hint" style="margin-top:8px">O arrastra un archivo aqu&iacute;</p>
+        </div>
+        <div class="file-info-bar hidden" id="file-info-bar">
+          <span id="file-info-name"></span>
+          <button class="btn btn-primary btn-sm" id="analyze-file-btn" onclick="analyzeFile()">&#x1F680; Auditar</button>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">&#x1F4DD; O pega el c&oacute;digo</h2>
+          <textarea id="code-textarea" class="text-input" style="min-height:150px;font-family:var(--font-mono);font-size:13px;resize:vertical;width:100%;margin-bottom:10px" placeholder="Pega aqu&iacute; el c&oacute;digo a analizar..."></textarea>
+          <button class="btn btn-primary" id="analyze-code-btn" onclick="analyzeCode()">&#x1F680; Auditar con RAPTOR</button>
+        </div>
+
+        <div class="output-header" style="display:none" id="analyze-output-header">
+          <span class="output-label">&#x1F50D; Resultado del an&aacute;lisis</span>
+          <span class="output-meta" id="analyze-meta"></span>
+        </div>
+      </div>
+      <div class="output-wrapper" id="analyze-output-wrapper">
+        <div class="output-box" id="analyze-output">
+          <div class="output-placeholder"><span>&#x1F6E1;&#xFE0F;</span><p>El informe de seguridad aparecer&aacute; aqu&iacute;...</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WEB TAB -->
+    <section class="tab-panel" id="tab-web">
+      <div class="panel-body">
+        <div class="card">
+          <h2 class="card-title">&#x1F310; Auditor&iacute;a de URL</h2>
+          <div class="input-group">
+            <input type="text" id="url-input" class="text-input" placeholder="https://ejemplo.com" />
+            <button class="btn btn-primary" id="analyze-url-btn" onclick="analyzeURL()">Auditar Web</button>
+          </div>
+        </div>
+      </div>
+      <div class="output-wrapper" id="web-output-wrapper">
+        <div class="output-box" id="web-output">
+          <div class="output-placeholder"><span>&#x1F310;</span><p>Resultados del an&aacute;lisis web...</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHAT TAB -->
+    <section class="tab-panel" id="tab-chat">
+      <div class="chat-wrapper">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-welcome">
+            <div class="chat-welcome-icon">&#x1F916;</div>
+            <h2>Chat de Seguridad Auditor-AI</h2>
+            <p>Asistente DevSecOps con metodolog&iacute;a RAPTOR activada.<br/>Haz cualquier pregunta sobre vulnerabilidades, c&oacute;digo o buenas pr&aacute;cticas de seguridad.</p>
+            <button class="btn btn-primary" id="start-chat-btn" onclick="startChat()">&#x1F4AC; Iniciar sesi&oacute;n de chat</button>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <textarea id="chat-input" placeholder="Pregunta de seguridad..." rows="1" disabled></textarea>
+          <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()" disabled>Enviar</button>
+          <div class="chat-hint" id="chat-hint">Inicia la sesi&oacute;n para comenzar a chatear</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <div class="api-key-overlay" id="api-key-overlay">
+    <div class="api-key-modal">
+      <div class="api-key-modal-icon">&#x1F511;</div>
+      <h2>Configurar API Key</h2>
+      <p>Introduce tu API Key de Google Gemini para usar Auditor-AI.</p>
+      <p class="api-key-hint">Cons&iacute;guela gratis en <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a></p>
+      <input type="text" id="api-key-input" class="text-input" placeholder="AIzaSy..." autocomplete="off" />
+      <button class="btn btn-primary" id="api-key-btn" onclick="saveApiKey()">Guardar y conectar</button>
+      <p class="api-key-error hidden" id="api-key-error">API Key inv&aacute;lida. Intenta de nuevo.</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
