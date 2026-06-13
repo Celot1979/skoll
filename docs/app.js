@@ -80,7 +80,9 @@ function getModelEndpoint(model, streaming) {
 async function geminiFetch(contents, systemPrompt, streaming) {
   const key = getApiKey();
   if (!key) throw new Error("API Key no configurada");
-  const url = getModelEndpoint(getModel(), streaming) + "&key=" + encodeURIComponent(key);
+  const base = getModelEndpoint(getModel(), streaming);
+  const sep = base.includes("?") ? "&" : "?";
+  const url = base + sep + "key=" + encodeURIComponent(key);
   return fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -163,36 +165,16 @@ function checkApiKey() {
   }
 }
 
-async function saveApiKey() {
+function saveApiKey() {
   const overlay = document.getElementById("api-key-overlay");
   const input = document.getElementById("api-key-input");
-  const btn = document.getElementById("api-key-btn");
   const error = document.getElementById("api-key-error");
   const key = input.value.trim();
   if (!key || !key.startsWith("AIza")) return;
-  btn.disabled = true;
-  btn.textContent = "Verificando...";
-  error.classList.add("hidden");
-  try {
-    const res = await fetch(
-      `${GEMINI_BASE}/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: "test" }] }] })
-      }
-    );
-    if (!res.ok) throw new Error();
-    localStorage.setItem("gemini_api_key", key);
-    overlay.classList.add("hidden");
-    showToast("API Key configurada correctamente", "success");
-    checkApiKey();
-  } catch {
-    error.classList.remove("hidden");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Guardar y conectar";
-  }
+  localStorage.setItem("gemini_api_key", key);
+  overlay.classList.add("hidden");
+  showToast("API Key guardada. Listo para usar.", "success");
+  checkApiKey();
 }
 
 // ── Tab switching ────────────────────────────────────────────────────
