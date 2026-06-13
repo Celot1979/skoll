@@ -48,9 +48,16 @@
       <div class="model-select-wrapper">
         <label for="global-model">Modelo</label>
         <select id="global-model">
-          <option value="gemini-2.5-flash" selected>gemini-2.5-flash &#x26A1; (principal)</option>
-          <option value="gemini-1.5-flash">gemini-1.5-flash &#x1F525; (1500 req/d&iacute;a)</option>
-          <option value="gemini-2.5-pro">gemini-2.5-pro &#x1F9E0; (cuota limitada)</option>
+          <optgroup label="Gemini (gratis, con cuota)">
+            <option value="gemini-2.5-flash" selected>gemini-2.5-flash &#x26A1;</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash (1500 req/d&iacute;a)</option>
+          </optgroup>
+          <optgroup label="Groq &#x1F525; (gratis, sin cuota pr&aacute;ctica)">
+            <option value="llama3-70b-8192">Llama 3 70B</option>
+            <option value="llama3-8b-8192">Llama 3 8B</option>
+            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+            <option value="gemma2-9b-it">Gemma 2 9B</option>
+          </optgroup>
         </select>
       </div>
     </div>
@@ -144,12 +151,19 @@
   <div class="api-key-overlay" id="api-key-overlay">
     <div class="api-key-modal">
       <div class="api-key-modal-icon">&#x1F511;</div>
-      <h2>Configurar API Key</h2>
-      <p>Introduce tu API Key de Google Gemini para usar Auditor-AI.</p>
-      <p class="api-key-hint">Cons&iacute;guela gratis en <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a></p>
-      <input type="text" id="api-key-input" class="text-input" placeholder="AIzaSy..." autocomplete="off" />
-      <button class="btn btn-primary" id="api-key-btn" onclick="saveApiKey()">Guardar y conectar</button>
-      <p class="api-key-error hidden" id="api-key-error">API Key inv&aacute;lida. Intenta de nuevo.</p>
+      <h2>Configurar API Keys</h2>
+      <p style="margin-bottom:16px">Necesitas al menos una para usar la app.</p>
+
+      <label style="font-size:12px;color:var(--accent);font-weight:600;display:block;text-align:left;margin-bottom:4px">&#x1F30D; Gemini (AIzaSy...)</label>
+      <input type="text" id="gemini-key-input" class="text-input" placeholder="AIzaSy..." autocomplete="off" style="margin-bottom:12px" />
+      <p class="api-key-hint" style="margin-bottom:16px">Gratis en <a href="https://aistudio.google.com/" target="_blank" rel="noopener">aistudio.google.com</a> &mdash; 1500 req/d&iacute;a</p>
+
+      <label style="font-size:12px;color:var(--green);font-weight:600;display:block;text-align:left;margin-bottom:4px">&#x26A1; Groq (gsk_...)</label>
+      <input type="text" id="groq-key-input" class="text-input" placeholder="gsk_..." autocomplete="off" style="margin-bottom:12px" />
+      <p class="api-key-hint" style="margin-bottom:20px">Gratis en <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> &mdash; 1440 req/d&iacute;a</p>
+
+      <button class="btn btn-primary" id="api-key-btn" onclick="saveApiKeys()">Guardar y conectar</button>
+      <p class="api-key-error hidden" id="api-key-error">Configura al menos una API Key</p>
     </div>
   </div>
 
