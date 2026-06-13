@@ -15,6 +15,8 @@
 </head>
 <body>
 
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo">
@@ -55,6 +57,9 @@
 
   <main class="main-content">
     <header class="topbar">
+      <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Menú">
+        <span></span><span></span><span></span>
+      </button>
       <div class="topbar-title" id="topbar-title">An&aacute;lisis de C&oacute;digo</div>
     </header>
 
@@ -120,8 +125,12 @@
           </div>
         </div>
         <div class="chat-input-area">
-          <textarea id="chat-input" placeholder="Pregunta de seguridad..." rows="1" disabled></textarea>
-          <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()" disabled>Enviar</button>
+          <div class="chat-input-wrapper">
+            <textarea id="chat-input" class="chat-textarea" placeholder="Pregunta de seguridad..." rows="1" disabled></textarea>
+            <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()" disabled aria-label="Enviar">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
           <div class="chat-hint" id="chat-hint">Inicia la sesi&oacute;n para comenzar a chatear</div>
         </div>
       </div>

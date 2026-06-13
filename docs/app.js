@@ -92,6 +92,9 @@ async function geminiFetch(contents, systemPrompt, streaming) {
 }
 
 async function geminiStream(contents, systemPrompt, onChunk, onDone, onError) {
+  let doneCalled = false;
+  const safeDone = (t) => { if (!doneCalled) { doneCalled = true; onDone(t); } };
+  const safeChunk = (t) => { if (!doneCalled) onChunk(t); };
   try {
     const res = await geminiFetch(contents, systemPrompt, true);
     if (!res.ok) {
@@ -112,23 +115,23 @@ async function geminiStream(contents, systemPrompt, onChunk, onDone, onError) {
         if (!line.startsWith("data: ")) continue;
         const json = line.slice(6).trim();
         if (!json) continue;
-        if (json === "[DONE]") { onDone(fullText); return; }
+        if (json === "[DONE]") { safeDone(fullText); return; }
         try {
           const evt = JSON.parse(json);
           const text = evt.candidates?.[0]?.content?.parts?.[0]?.text || "";
           const finish = evt.candidates?.[0]?.finishReason;
           if (text) {
             fullText += text;
-            onChunk(fullText);
+            safeChunk(fullText);
           }
           if (finish && finish !== "FINISH_REASON_UNSPECIFIED") {
-            onDone(fullText);
+            safeDone(fullText);
             return;
           }
         } catch {}
       }
     }
-    onDone(fullText);
+    safeDone(fullText);
   } catch (e) {
     onError(e.message);
   }
@@ -161,6 +164,7 @@ function checkApiKey() {
 }
 
 async function saveApiKey() {
+  const overlay = document.getElementById("api-key-overlay");
   const input = document.getElementById("api-key-input");
   const btn = document.getElementById("api-key-btn");
   const error = document.getElementById("api-key-error");
@@ -201,6 +205,29 @@ function switchTab(tab) {
   document.getElementById("topbar-title").textContent = titles[tab];
   document.getElementById("analyze-output-header").style.display = "none";
 }
+
+function toggleSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  sidebar.classList.toggle("collapsed");
+  overlay.classList.toggle("hidden");
+}
+
+// On mobile, sidebar starts collapsed and clicking a nav item closes it
+(function setupMobile() {
+  if (window.innerWidth < 768) {
+    document.getElementById("sidebar").classList.add("collapsed");
+    document.getElementById("sidebar-overlay").classList.add("hidden");
+  }
+  document.querySelectorAll(".nav-item").forEach(b => {
+    b.addEventListener("click", () => {
+      if (window.innerWidth < 768) {
+        document.getElementById("sidebar").classList.add("collapsed");
+        document.getElementById("sidebar-overlay").classList.add("hidden");
+      }
+    });
+  });
+})();
 
 // ── File Input & Drop Zone ───────────────────────────────────────────
 function setupFileInput() {
